@@ -1,0 +1,50 @@
+name: Prepare VectorStudio publication
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/prepare-publication.yml
+permissions:
+  contents: read
+  pages: write
+jobs:
+  verify-source-and-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check original source availability without credentials
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+        shell: bash
+        run: |
+          set +e
+          timeout 30 git ls-remote 'https://git.chatgpt-team.site/68d42725-37d6-4128-a78b-83c4c7ae6c20/appgprj_6aa8594ca51c8191bbb6e609d1901315.git' HEAD > /tmp/source-check.txt 2>&1
+          code=$?
+          echo "Original source read status: $code"
+          if [ "$code" = 0 ]; then cat /tmp/source-check.txt; fi
+          python3 - <<'PY'
+          import urllib.request, hashlib
+          url='https://vellum-vector-studio.wisodev.chatgpt.site/studio/core/index.js'
+          try:
+              with urllib.request.urlopen(url,timeout=30) as response:
+                  data=response.read()
+                  print('Hosted module response:',response.status,response.headers.get('Content-Type'))
+                  print('Hosted module SHA256:',hashlib.sha256(data).hexdigest())
+          except Exception as error:
+              print('Hosted module is not anonymously downloadable:',type(error).__name__)
+          PY
+      - name: Check and enable GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" --jq '{html_url,build_type,status}'; then
+            echo 'Pages is already configured.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            if gh api --method POST "repos/$GITHUB_REPOSITORY/pages" -f build_type=workflow --jq '{html_url,build_type,status}'; then
+              echo 'Pages enabled for GitHub Actions.' >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo 'Pages needs repository-owner enablement in Settings > Pages > GitHub Actions.' >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
