@@ -40,10 +40,21 @@ jobs:
           path: publication-output
           if-no-files-found: warn
           retention-days: 30
+      - name: Validate hidden publication files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('dist/pages')
+          for path in root.rglob('*'):
+              relative=path.relative_to(root)
+              if any(part.startswith('.') for part in relative.parts):
+                  assert relative.as_posix()=='.nojekyll' and path.is_file() and path.stat().st_size==0,relative
+          PY
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist/pages
+          include-hidden-files: true
   deploy:
     needs: build
     runs-on: ubuntu-24.04
@@ -89,9 +100,16 @@ jobs:
           assert report['edition']=='browser-local'
           def verify(item):
               name,expected=item
-              actual=hashlib.sha256(read(name)).hexdigest()
-              assert actual==expected,name
-              return name
+              for attempt in range(4):
+                  try:
+                      actual=hashlib.sha256(read(name)).hexdigest()
+                      assert actual==expected,f'{name}: expected {expected}, got {actual}'
+                      print('Verified',name,flush=True)
+                      return name
+                  except Exception as error:
+                      if attempt==3:
+                          raise RuntimeError('Live asset verification failed: '+name) from error
+                      time.sleep(2**attempt)
           with ThreadPoolExecutor(max_workers=8) as pool:
               checked=list(pool.map(verify,report['files'].items()))
           print(json.dumps({'url':base,'commit':commit,'verifiedAssets':len(checked),'capabilities':report['capabilities']},indent=2))
