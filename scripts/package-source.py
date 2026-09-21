@@ -5,12 +5,21 @@ out=pathlib.Path(sys.argv[1]).resolve();out.parent.mkdir(parents=True,exist_ok=T
 version=json.loads((root/'package.json').read_text())['version']
 sha=subprocess.check_output(['git','rev-parse','--verify','HEAD'],cwd=root,text=True).strip()
 tracked=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
-files={p for p in tracked if p and not p.startswith(('.openai/','.sites-runtime/','.agents/','.codex/')) and not p.endswith('.pyc')}
+# Keep the public D1 binding-name configuration, never machine-local hosting state.
+public_config='.openai/hosting.json'
+config=json.loads((root/public_config).read_text())
+if config != {'d1':'DB','r2':None}:
+    raise SystemExit('Source packaging requires the public, credential-free hosting defaults')
+files={p for p in tracked if p and (p==public_config or not p.startswith(('.openai/','.sites-runtime/','.agents/','.codex/'))) and not p.endswith('.pyc')}
 for directory in ['packages/vector/dist','packages/vector/licenses']:
     files.update(str(p.relative_to(root)) for p in (root/directory).rglob('*') if p.is_file())
 release=f'releases/vellum-studio-vector-{version}.tgz'
 if not (root/release).exists():raise SystemExit('Pack the matching npm library first')
 files.add(release)
+for name in files:
+    path=pathlib.PurePosixPath(name)
+    if path.is_absolute() or '..' in path.parts or path.parts[0] in ('data','node_modules','.ci') or path.name.startswith('.env') or path.suffix.lower() in ('.ttf','.otf','.pem','.sqlite','.db'):
+        raise SystemExit('Refusing to package environment data: '+name)
 manifest={'name':'Vellum Vector Studio','version':version,'source_commit':sha,'files':{}}
 with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
     for name in sorted(files):

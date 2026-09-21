@@ -1,0 +1,100 @@
+name: Publish GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test dependency-free core, server and Pages adapters
+        run: node --test tests/core.test.mjs tests/server.test.mjs tests/sync.test.mjs tests/realtime.test.mjs tests/websocket.test.mjs tests/pages.test.mjs
+      - name: Build browser-local edition
+        run: node scripts/build-pages.mjs
+      - name: Qualify browser workflows and persistent storage
+        env:
+          PYTHON: .ci/browser/bin/python
+        run: |
+          python3 -m venv .ci/browser
+          .ci/browser/bin/pip install playwright==1.55.0
+          .ci/browser/bin/python -m playwright install --with-deps chromium
+          node scripts/test-pages-browser.mjs
+      - name: Preserve browser verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-browser-verification
+          path: publication-output
+          if-no-files-found: warn
+          retention-days: 30
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/pages
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish qualified static assets
+        id: deployment
+        uses: actions/deploy-pages@v4
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - name: Verify live commit and every deployed asset hash
+        run: |
+          python3 - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor
+          import hashlib,json,os,time,urllib.request,urllib.parse
+          base=os.environ['PAGE_URL']
+          commit=os.environ['GITHUB_SHA']
+          def read(path):
+              request=urllib.request.Request(urllib.parse.urljoin(base,path)+'?verify='+commit,headers={'Cache-Control':'no-cache','User-Agent':'VectorStudio-deployment-verification'})
+              with urllib.request.urlopen(request,timeout=30) as response:
+                  assert response.status==200
+                  return response.read()
+          for attempt in range(12):
+              try:
+                  report=json.loads(read('build-info.json'))
+                  assert report['sourceCommit']==commit,report.get('sourceCommit')
+                  break
+              except Exception:
+                  if attempt==11: raise
+                  time.sleep(5)
+          assert report['edition']=='browser-local'
+          def verify(item):
+              name,expected=item
+              actual=hashlib.sha256(read(name)).hexdigest()
+              assert actual==expected,name
+              return name
+          with ThreadPoolExecutor(max_workers=8) as pool:
+              checked=list(pool.map(verify,report['files'].items()))
+          print(json.dumps({'url':base,'commit':commit,'verifiedAssets':len(checked),'capabilities':report['capabilities']},indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as summary:
+              summary.write(f'Published and verified {len(checked)} assets at {base}\n\nSource commit: `{commit}`. Browser-local storage; server services are not hosted by Pages.\n')
+          PY

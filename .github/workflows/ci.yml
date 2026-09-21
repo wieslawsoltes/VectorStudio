@@ -1,0 +1,79 @@
+name: Validate and package
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VELLUM_TEST_FONT: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install locked dependencies
+        run: |
+          npm install --global pnpm@11.25.0
+          pnpm install --frozen-lockfile
+      - name: Install native validation engines
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcdr-dev librevenge-dev pkg-config g++ inkscape ghostscript python3-pypdf fonts-dejavu-core
+          python3 scripts/fetch-native-fixture.py
+          sh native/build.sh
+      - name: Bundle browser and server adapters
+        run: node scripts/bundle-libraries.mjs
+      - name: Test complete engine, controls, native adapters and collaboration
+        shell: bash
+        run: |
+          mkdir -p publication-output
+          set -o pipefail
+          node --test tests/*.test.mjs 2>&1 | tee publication-output/tests.log
+      - name: Check all public declarations
+        run: pnpm exec tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --lib ES2022,DOM public/studio/{core,render,controls,elements,io,collab,advanced,color,typography,svg}/index.d.ts
+      - name: Build hosted server application
+        run: pnpm run build
+      - name: Build Pages and package standalone modules
+        run: |
+          node scripts/build-pages.mjs
+          node scripts/package-libraries.mjs
+          mkdir -p releases
+          (cd packages/vector && npm pack --pack-destination ../../releases)
+          python3 scripts/package-source.py publication-output/VellumVectorStudio-2.0.0-GitHub-source.zip
+      - name: Verify clean-extraction no-install local runtime
+        run: |
+          python3 - <<'PY'
+          import zipfile,pathlib
+          with zipfile.ZipFile('publication-output/VellumVectorStudio-2.0.0-GitHub-source.zip') as archive:
+              assert archive.testzip() is None
+              archive.extractall('.ci/clean-source')
+          assert not pathlib.Path('.ci/clean-source/VellumVectorStudio/node_modules').exists()
+          PY
+          (cd .ci/clean-source/VellumVectorStudio && node server/local.mjs > /tmp/vectorstudio-runtime.log 2>&1) &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:3000/ > /tmp/vectorstudio-index.html; then break; fi
+            sleep 1
+          done
+          grep -q 'Vellum' /tmp/vectorstudio-index.html
+          curl --fail --silent http://127.0.0.1:3000/studio/app.js > /dev/null
+      - name: Preserve qualification and complete source artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vectorstudio-verified-source
+          path: |
+            publication-output
+            releases/*.tgz
+          if-no-files-found: warn
+          retention-days: 30

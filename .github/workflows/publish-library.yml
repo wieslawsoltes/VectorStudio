@@ -1,0 +1,52 @@
+name: Package or publish vector library
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish this version to an npm scope you control (requires NPM_TOKEN)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VELLUM_TEST_FONT: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install locked dependencies
+        run: |
+          npm install --global pnpm@11.25.0
+          pnpm install --frozen-lockfile
+      - name: Install optional native engines and fixture
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcdr-dev librevenge-dev pkg-config g++ inkscape ghostscript python3-pypdf fonts-dejavu-core
+          python3 scripts/fetch-native-fixture.py
+          sh native/build.sh
+      - run: node scripts/bundle-libraries.mjs
+      - run: node --test tests/*.test.mjs
+      - run: node scripts/package-libraries.mjs
+      - name: Package all modules
+        run: |
+          mkdir -p releases
+          (cd packages/vector && npm pack --pack-destination ../../releases)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: standalone-vector-library
+          path: releases/*.tgz
+      - name: Publish only when explicitly requested
+        if: inputs.publish
+        working-directory: packages/vector
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
