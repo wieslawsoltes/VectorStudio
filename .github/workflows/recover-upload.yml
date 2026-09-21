@@ -32,9 +32,10 @@ jobs:
           from pathlib import Path
           path=Path('scripts/test-pages-browser.py')
           text=path.read_text()
-          text=text.replace('page.locator("dialog")', 'page.locator("dialog[open]")')
-          text=text.replace('page.locator("dialog button[data-action=close-dialog]")', 'page.locator("dialog[open] button[data-action=close-dialog]")')
-          text=text.replace('page.locator("dialog button[data-dialog-close]")', 'page.locator("dialog[open] button[data-dialog-close]")')
+          assert text.count("page.locator('dialog')") == 2
+          text=text.replace("page.locator('dialog')", "page.locator('dialog[open]')")
+          text=text.replace("page.locator('dialog [", "page.locator('dialog[open] [")
+          assert "page.locator('dialog')" not in text
           path.write_text(text)
           PY
       - name: Install locked JavaScript dependencies
