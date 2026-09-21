@@ -1,0 +1,88 @@
+{
+  "name": "@vellum-studio/vector",
+  "version": "2.0.0",
+  "description": "Modular vector document engine, retained SVG/WebGPU, ICC color, HarfBuzz typography, controls and Yjs collaboration",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./render": {
+      "types": "./dist/render/index.d.ts",
+      "import": "./dist/render/index.js"
+    },
+    "./controls": {
+      "types": "./dist/controls/index.d.ts",
+      "import": "./dist/controls/index.js"
+    },
+    "./elements": {
+      "types": "./dist/elements/index.d.ts",
+      "import": "./dist/elements/index.js"
+    },
+    "./io": {
+      "types": "./dist/io/index.d.ts",
+      "import": "./dist/io/index.js"
+    },
+    "./collaboration": {
+      "types": "./dist/collab/index.d.ts",
+      "import": "./dist/collab/index.js"
+    },
+    "./sample": "./dist/core/sample.js",
+    "./advanced": {
+      "types": "./dist/advanced/index.d.ts",
+      "import": "./dist/advanced/index.js"
+    },
+    "./typography": {
+      "types": "./dist/typography/index.d.ts",
+      "import": "./dist/typography/index.js"
+    },
+    "./color": {
+      "types": "./dist/color/index.d.ts",
+      "import": "./dist/color/index.js"
+    },
+    "./svg": {
+      "types": "./dist/svg/index.d.ts",
+      "import": "./dist/svg/index.js"
+    },
+    "./crdt": {
+      "types": "./dist/collab/crdt.d.ts",
+      "import": "./dist/collab/crdt.js"
+    },
+    "./realtime": {
+      "types": "./dist/collab/realtime.d.ts",
+      "import": "./dist/collab/realtime.js"
+    },
+    "./browser-storage": {
+      "types": "./dist/collab/browser.d.ts",
+      "import": "./dist/collab/browser.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses"
+  ],
+  "keywords": [
+    "vector",
+    "svg",
+    "webgpu",
+    "editor",
+    "geometry",
+    "web-components",
+    "collaboration"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

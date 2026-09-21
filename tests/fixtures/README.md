@@ -1,0 +1,3 @@
+`cc0-graveyard-tile.cdr` is `vector/Tile.cdr` from pzUH's Free Graveyard Platformer Tileset, dedicated to CC0 by its author at https://opengameart.org/content/free-graveyard-platformer-tileset . Archive: https://opengameart.org/sites/default/files/GraveyardTileset.zip . CDR SHA256: dc467d4db4244de1005b02a59551ec59e061992bc5b968572bde2acd6c047cb3 . It is a real single-page CDR conversion regression fixture. Attribution is retained as provenance, although CC0 does not require it.
+
+Set `VELLUM_TEST_FONT` to an installed DejaVu Sans font for deterministic HarfBuzz shaping regressions. CI uses `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`; environment-installed fonts are not redistributed. The original fixture notice is retained in `DejaVu-LICENSE.txt`.
